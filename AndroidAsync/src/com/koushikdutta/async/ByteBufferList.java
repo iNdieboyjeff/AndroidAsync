@@ -357,9 +357,18 @@ public class ByteBufferList {
         return reclaimed;
     }
 
-    private static final int MAX_SIZE = 1024 * 1024;
+    private static int MAX_SIZE = 1024 * 1024;
+    private static int MAX_ITEM_SIZE = 1024 * 256;
     static int currentSize = 0;
     static int maxItem = 0;
+
+    public static void setMaxPoolSize(int size) {
+        MAX_SIZE = size;
+    }
+
+    public static void setMaxItemSize(int size) {
+        MAX_ITEM_SIZE = size;
+    }
 
     private static boolean reclaimedContains(ByteBuffer b) {
         for (ByteBuffer other: reclaimed) {
@@ -375,7 +384,7 @@ public class ByteBufferList {
         }
         if (b.capacity() < 8192)
             return;
-        if (b.capacity() > 1024 * 256)
+        if (b.capacity() > MAX_ITEM_SIZE)
             return;
 
         PriorityQueue<ByteBuffer> r = getReclaimed();
