@@ -1,6 +1,8 @@
 package com.koushikdutta.async.http;
 
+import android.net.Uri;
 import android.os.Handler;
+import android.text.TextUtils;
 
 import com.koushikdutta.async.AsyncSSLException;
 import com.koushikdutta.async.AsyncServer;
@@ -242,16 +244,31 @@ public class AsyncHttpClient {
                         RawHeaders headers = mHeaders.getHeaders();
                         int responseCode = headers.getResponseCode();
                         if ((responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == 307) && request.getFollowRedirect()) {
-                            URI redirect = URI.create(headers.get("Location"));
+                            String location = headers.get("Location");
+                            URI redirect = URI.create(location);
                             if (redirect == null || redirect.getScheme() == null) {
-                                redirect = URI.create(uri.toString().substring(0, uri.toString().length() - uri.getPath().length()) + headers.get("Location"));
+                                Uri builder;
+                                if (location.startsWith("/")) {
+                                    builder = Uri.parse(uri.toString()).buildUpon().path(location).build();
+                                }
+                                else {
+                                    String full = uri.toString();
+                                    int lastIndex = full.lastIndexOf("/");
+                                    String relative = full.substring(0, lastIndex);
+                                    builder = Uri.parse(relative).buildUpon().appendPath(location).build();
+                                }
+
+                                redirect = URI.create(builder.toString());
                             }
-                            AsyncHttpRequest newReq = new AsyncHttpRequest(redirect, request.getMethod());
+                            AsyncHttpRequest newReq = new AsyncHttpRequest(redirect, AsyncHttpGet.METHOD);
                             newReq.executionTime = request.executionTime;
                             newReq.logLevel = request.logLevel;
                             newReq.LOGTAG = request.LOGTAG;
                             newReq.proxyHost = request.proxyHost;
                             newReq.proxyPort = request.proxyPort;
+                            String userAgent = request.getHeaders().getHeaders().get("User-Agent");
+                            if (!TextUtils.isEmpty(userAgent))
+                                newReq.getHeaders().getHeaders().set("User-Agent", userAgent);
                             request.logi("Redirecting");
                             newReq.logi("Redirected");
                             execute(newReq, redirectCount + 1, cancel, callback);
