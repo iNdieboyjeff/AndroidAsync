@@ -18,7 +18,7 @@ public class RedirectTests extends TestCase {
     protected void setUp() throws Exception {
         super.setUp();
         AsyncHttpServer server = new AsyncHttpServer();
-        server.listen(5555);
+        server.listen(6003);
         server.get("/foo", new HttpServerRequestCallback() {
             @Override
             public void onRequest(AsyncHttpServerRequest request, final AsyncHttpServerResponse response) {
@@ -32,7 +32,18 @@ public class RedirectTests extends TestCase {
             }
         });
 
-
+        server.get("/foo/poo", new HttpServerRequestCallback() {
+            @Override
+            public void onRequest(AsyncHttpServerRequest request, final AsyncHttpServerResponse response) {
+                response.redirect("../poo");
+            }
+        });
+        server.get("/poo", new HttpServerRequestCallback() {
+            @Override
+            public void onRequest(AsyncHttpServerRequest request, final AsyncHttpServerResponse response) {
+                response.send("SWEET!");
+            }
+        });
         server.get("/foo/bar", new HttpServerRequestCallback() {
             @Override
             public void onRequest(AsyncHttpServerRequest request, final AsyncHttpServerResponse response) {
@@ -55,15 +66,21 @@ public class RedirectTests extends TestCase {
 
     public void testRelativeRedirect() throws Exception {
         String ret = AsyncHttpClient.getDefaultInstance()
-        .executeString(new AsyncHttpGet("http://localhost:5555/foo/bar"))
+        .executeString(new AsyncHttpGet("http://localhost:6003/foo/bar"))
         .get();
 
         assertEquals(ret, "SUCCESS!");
 
         ret = AsyncHttpClient.getDefaultInstance()
-        .executeString(new AsyncHttpGet("http://localhost:5555/foo"))
+        .executeString(new AsyncHttpGet("http://localhost:6003/foo"))
         .get();
 
         assertEquals(ret, "BORAT!");
+
+        ret = AsyncHttpClient.getDefaultInstance()
+        .executeString(new AsyncHttpGet("http://localhost:6003/foo/poo"))
+        .get();
+
+        assertEquals(ret, "SWEET!");
     }
 }
