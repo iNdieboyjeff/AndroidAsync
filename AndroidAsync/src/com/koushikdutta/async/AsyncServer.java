@@ -9,6 +9,7 @@ import com.koushikdutta.async.callback.ConnectCallback;
 import com.koushikdutta.async.callback.ListenCallback;
 import com.koushikdutta.async.future.Cancellable;
 import com.koushikdutta.async.future.Future;
+import com.koushikdutta.async.future.FutureCallback;
 import com.koushikdutta.async.future.SimpleFuture;
 import com.koushikdutta.async.future.TransformFuture;
 import com.koushikdutta.async.util.StreamUtility;
@@ -358,13 +359,24 @@ public class AsyncServer {
         if (!remote.isUnresolved())
             return connectResolvedInetSocketAddress(remote, callback);
 
-        return getByName(remote.getHostName())
-        .then(new TransformFuture<AsyncSocket, InetAddress>() {
+        final SimpleFuture<AsyncNetworkSocket> ret = new SimpleFuture<AsyncNetworkSocket>();
+
+        Future<InetAddress> lookup = getByName(remote.getHostName());
+        ret.setParent(lookup);
+        lookup
+        .setCallback(new FutureCallback<InetAddress>() {
             @Override
-            protected void transform(InetAddress result) throws Exception {
-                setParent(connectResolvedInetSocketAddress(new InetSocketAddress(remote.getHostName(), remote.getPort()), callback));
+            public void onCompleted(Exception e, InetAddress result) {
+                if (e != null) {
+                    callback.onConnectCompleted(e, null);
+                    ret.setComplete(e);
+                    return;
+                }
+
+                ret.setComplete(connectResolvedInetSocketAddress(new InetSocketAddress(remote.getHostName(), remote.getPort()), callback));
             }
         });
+        return ret;
     }
 
     public Cancellable connectSocket(final String host, final int port, final ConnectCallback callback) {
@@ -586,6 +598,7 @@ public class AsyncServer {
             }
             catch (Exception e) {
                 Log.e(LOGTAG, "exception?", e);
+                throw new RuntimeException(e);
             }
             // see if we keep looping, this must be in a synchronized block since the queue is accessed.
             synchronized (server) {
@@ -786,5 +799,10 @@ public class AsyncServer {
     
     public boolean isAffinityThread() {
         return mAffinity == Thread.currentThread();
+    }
+
+    public boolean isAffinityThreadOrStopped() {
+        Thread affinity = mAffinity;
+        return affinity == null || affinity == Thread.currentThread();
     }
 }
