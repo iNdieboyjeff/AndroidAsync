@@ -191,19 +191,61 @@ AsyncHttpClient.getDefaultInstance().execute(post, new StringCallback() {
 ```
 
 
-### AndroidAsync also let's you create simple HTTP servers (and websocket servers):
+### AndroidAsync also let's you create simple HTTP servers:
 
 ```java
 AsyncHttpServer server = new AsyncHttpServer();
+
+List<WebSocket> _sockets = new ArrayList<WebSocket>();
+
 server.get("/", new HttpServerRequestCallback() {
     @Override
     public void onRequest(AsyncHttpServerRequest request, AsyncHttpServerResponse response) {
         response.send("Hello!!!");
     }
 });
+
 // listen on port 5000
 server.listen(5000);
 // browsing http://localhost:5000 will return Hello!!!
+
+```
+
+### And WebSocket Servers:
+
+```java
+server.websocket("/live", new WebSocketRequestCallback() {
+    @Override
+    public void onConnected(final WebSocket webSocket, RequestHeaders headers) {
+        _sockets.add(webSocket);
+        
+        //Use this to clean up any references to your websocket
+        websocket.setClosedCallback(new CompletedCallback() {
+            @Override
+            public void onCompleted(Exception ex) {
+                try {
+                    if (ex != null)
+                        Log.e("WebSocket", "Error");
+                } finally {
+                    _sockets.remove(webSocket);
+                }
+            }
+        });
+        
+        webSocket.setStringCallback(new StringCallback() {
+            @Override
+            public void onStringAvailable(String s) {
+                if ("Hello Server".equals(s))
+                    webSocket.send("Welcome Client!");
+            }
+        });
+    
+    }
+});
+
+//..Sometime later, broadcast!
+for (WebSocket socket : _sockets)
+    socket.send("Fireball!");
 ```
 
 ### Futures

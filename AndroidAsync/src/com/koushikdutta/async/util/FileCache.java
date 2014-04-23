@@ -9,7 +9,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Created by koush on 4/12/14.
@@ -52,6 +54,7 @@ public class FileCache {
         }
     }
 
+    boolean loadAsync;
     Random random = new Random();
     public File getTempFile() {
         File f;
@@ -159,6 +162,11 @@ public class FileCache {
         return new File(directory, getPartName(key, part));
     }
 
+    long blockSize = 4096;
+    public void setBlockSize(long blockSize) {
+        this.blockSize = blockSize;
+    }
+
     class InternalCache extends LruCache<String, CacheEntry> {
         public InternalCache() {
             super(size);
@@ -166,13 +174,15 @@ public class FileCache {
 
         @Override
         protected long sizeOf(String key, CacheEntry value) {
-            return value.size;
+            return Math.max(blockSize, value.size);
         }
 
         @Override
         protected void entryRemoved(boolean evicted, String key, CacheEntry oldValue, CacheEntry newValue) {
             super.entryRemoved(evicted, key, oldValue, newValue);
             if (newValue != null)
+                return;
+            if (loading)
                 return;
             new File(directory, key).delete();
         }
@@ -195,29 +205,30 @@ public class FileCache {
         }
     };
 
+    boolean loading;
     void load() {
-        File[] files = directory.listFiles();
-        if (files == null)
-            return;
-        ArrayList<File> list = new ArrayList<File>();
-        Collections.addAll(list, files);
-        Collections.sort(list, dateCompare);
+        loading = true;
+        try {
+            File[] files = directory.listFiles();
+            if (files == null)
+                return;
+            ArrayList<File> list = new ArrayList<File>();
+            Collections.addAll(list, files);
+            Collections.sort(list, dateCompare);
 
-        for (File file: list) {
-            String name = file.getName();
-            CacheEntry entry = new CacheEntry(file);
-            cache.put(name, entry);
-            cache.get(name);
+            for (File file: list) {
+                String name = file.getName();
+                CacheEntry entry = new CacheEntry(file);
+                cache.put(name, entry);
+                cache.get(name);
+            }
+        }
+        finally {
+            loading = false;
         }
     }
 
-    public FileCache(File directory, long size, boolean loadAsync) {
-        this.directory = directory;
-        this.size = size;
-        cache = new InternalCache();
-
-        directory.mkdirs();
-
+    private void doLoad() {
         if (loadAsync) {
             new Thread() {
                 @Override
@@ -231,6 +242,16 @@ public class FileCache {
         }
     }
 
+    public FileCache(File directory, long size, boolean loadAsync) {
+        this.directory = directory;
+        this.size = size;
+        this.loadAsync = loadAsync;
+        cache = new InternalCache();
+
+        directory.mkdirs();
+        doLoad();
+    }
+
     public long size() {
         return cache.size();
     }
@@ -240,7 +261,22 @@ public class FileCache {
         cache.evictAll();
     }
 
+    public Set<String> keySet() {
+        HashSet<String> ret = new HashSet<String>();
+        File[] files = directory.listFiles();
+        if (files == null)
+            return ret;
+        for (File file: files) {
+            String name = file.getName();
+            int last = name.lastIndexOf('.');
+            if (last != -1)
+                ret.add(name.substring(0, last));
+        }
+        return ret;
+    }
+
     public void setMaxSize(long maxSize) {
         cache.setMaxSize(maxSize);
+        doLoad();
     }
 }
