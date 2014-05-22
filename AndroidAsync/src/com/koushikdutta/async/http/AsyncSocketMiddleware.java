@@ -1,5 +1,7 @@
 package com.koushikdutta.async.http;
 
+import android.net.Uri;
+
 import com.koushikdutta.async.ArrayDeque;
 import com.koushikdutta.async.AsyncSocket;
 import com.koushikdutta.async.ByteBufferList;
@@ -15,7 +17,6 @@ import com.koushikdutta.async.future.TransformFuture;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.util.Hashtable;
 
 public class AsyncSocketMiddleware extends SimpleMiddleware {
@@ -34,7 +35,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
         this.idleTimeoutMs = idleTimeoutMs;
     }
     
-    public int getSchemePort(URI uri) {
+    public int getSchemePort(Uri uri) {
         if (uri.getScheme() == null || !uri.getScheme().equals(scheme))
             return -1;
         if (uri.getPort() == -1) {
@@ -51,7 +52,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
 
     AsyncHttpClient mClient;
 
-    protected ConnectCallback wrapCallback(ConnectCallback callback, URI uri, int port, boolean proxied) {
+    protected ConnectCallback wrapCallback(ConnectCallback callback, Uri uri, int port, boolean proxied) {
         return callback;
     }
 
@@ -80,7 +81,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
         proxyAddress = null;
     }
 
-    String computeLookup(URI uri, int port, String proxyHost, int proxyPort) {
+    String computeLookup(Uri uri, int port, String proxyHost, int proxyPort) {
         String proxy;
         if (proxyHost != null)
             proxy = proxyHost + ":" + proxyPort;
@@ -120,7 +121,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
 
     @Override
     public Cancellable getSocket(final GetSocketData data) {
-        final URI uri = data.request.getUri();
+        final Uri uri = data.request.getUri();
         final int port = getSchemePort(data.request.getUri());
         if (port == -1) {
             return null;
@@ -142,7 +143,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
 
             while (!info.sockets.isEmpty()) {
                 IdleSocketHolder idleSocketHolder = info.sockets.pop();
-                AsyncSocket socket = idleSocketHolder.socket;
+                final AsyncSocket socket = idleSocketHolder.socket;
                 if (idleSocketHolder.idleTime + idleTimeoutMs < System.currentTimeMillis()) {
                     socket.close();
                     continue;
@@ -150,7 +151,6 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
                 if (!socket.isOpen())
                     continue;
 
-                // use this or the above?
                 data.request.logd("Reusing keep-alive socket");
                 data.connectCallback.onConnectCompleted(null, socket);
 
@@ -282,7 +282,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
     private void recycleSocket(final AsyncSocket socket, AsyncHttpRequest request) {
         if (socket == null)
             return;
-        URI uri = request.getUri();
+        Uri uri = request.getUri();
         int port = getSchemePort(uri);
         final String lookup = computeLookup(uri, port, request.getProxyHost(), request.getProxyPort());
         final ArrayDeque<IdleSocketHolder> sockets;
@@ -326,7 +326,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
     }
 
     private void nextConnection(AsyncHttpRequest request) {
-        URI uri = request.getUri();
+        Uri uri = request.getUri();
         final int port = getSchemePort(uri);
         String key = computeLookup(uri, port, request.getProxyHost(), request.getProxyPort());
         synchronized (AsyncSocketMiddleware.this) {
@@ -360,7 +360,7 @@ public class AsyncSocketMiddleware extends SimpleMiddleware {
                 data.socket.close();
                 return;
             }
-            if (!HttpUtil.isKeepAlive(data.headers.getHeaders())) {
+            if (!HttpUtil.isKeepAlive(data.headers.getHeaders()) || !HttpUtil.isKeepAlive(data.request.getHeaders().getHeaders())) {
                 data.request.logv("closing out socket (not keep alive)");
                 data.socket.close();
                 return;
