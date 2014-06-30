@@ -5,6 +5,7 @@ import android.os.Build;
 import com.koushikdutta.async.callback.CompletedCallback;
 import com.koushikdutta.async.callback.DataCallback;
 import com.koushikdutta.async.callback.WritableCallback;
+import com.koushikdutta.async.util.Allocator;
 import com.koushikdutta.async.wrapper.AsyncSocketWrapper;
 
 import org.apache.http.conn.ssl.StrictHostnameVerifier;
@@ -27,12 +28,172 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket {
+    static SSLContext defaultSSLContext;
+
     AsyncSocket mSocket;
     BufferedDataEmitter mEmitter;
     BufferedDataSink mSink;
-    ByteBuffer mReadTmp = ByteBufferList.obtain(8192);
     boolean mUnwrapping = false;
     HostnameVerifier hostnameVerifier;
+
+    /*
+    private static void initTLS_1_2() {
+        try {
+            defaultSSLContext = SSLContext.getInstance("TLSv1.2");
+        }
+        catch (NoSuchAlgorithmException e) {
+        }
+    }
+
+    private static void initTLS_1_1() {
+        try {
+            defaultSSLContext = SSLContext.getInstance("TLSv1.1");
+        }
+        catch (NoSuchAlgorithmException e) {
+        }
+    }
+
+    private static void initTLS() {
+        try {
+            defaultSSLContext = SSLContext.getInstance("TLS");
+        }
+        catch (NoSuchAlgorithmException e) {
+        }
+    }
+
+    static {
+        try {
+            initTLS_1_2();
+            if (defaultSSLContext == null)
+                initTLS_1_1();
+            if (defaultSSLContext == null)
+                initTLS();
+            if (defaultSSLContext == null)
+                defaultSSLContext = SSLContext.getInstance("SSL");
+            // critical extension 2.5.29.15 is implemented improperly prior to 4.0.3.
+            // https://code.google.com/p/android/issues/detail?id=9307
+            // https://groups.google.com/forum/?fromgroups=#!topic/netty/UCfqPPk5O4s
+            // certs that use this extension will throw in Cipher.java.
+            // fallback is to use a custom SSLContext, and hack around the x509 extension.
+            TrustManager[] trustManagers = null;
+            if (Build.VERSION.SDK_INT <= 15) {
+                trustManagers = new TrustManager[] { new X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        for (X509Certificate cert : certs) {
+                            if (cert != null && cert.getCriticalExtensionOIDs() != null)
+                                cert.getCriticalExtensionOIDs().remove("2.5.29.15");
+                        }
+                    }
+                } };
+            }
+            defaultSSLContext.init(null, trustManagers, null);
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    // android SSL cipher suites were downgraded (!!) for some derpy reason.
+    // Paranoid people would be wise to enable the original/secure suites.
+    // http://op-co.de/blog/posts/android_ssl_downgrade/
+    public static final String RECOMMENDED_CIPHERS[] = {
+    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+    "TLS_DHE_RSA_WITH_AES_128_CBC_SHA",
+    "TLS_DHE_RSA_WITH_AES_256_CBC_SHA",
+    "TLS_DHE_DSS_WITH_AES_128_CBC_SHA",
+    "TLS_ECDHE_RSA_WITH_RC4_128_SHA",
+    "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA",
+    "TLS_RSA_WITH_AES_128_CBC_SHA",
+    "TLS_RSA_WITH_AES_256_CBC_SHA",
+    "SSL_RSA_WITH_3DES_EDE_CBC_SHA",
+    "SSL_RSA_WITH_RC4_128_SHA",
+    "SSL_RSA_WITH_RC4_128_MD5",
+    "TLS_RSA_WITH_AES_256_CBC_SHA256",
+    };
+
+    public static final String RECOMMENDED_PROTOCOLS[] = {
+    "TLSv1"
+    };
+
+    public static void setupRecommendedEngineSecurity(SSLEngine engine) {
+        LinkedHashSet<String> ciphers = new LinkedHashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
+        ciphers.addAll(Arrays.asList(engine.getSupportedCipherSuites()));
+        LinkedHashSet<String> protocols = new LinkedHashSet<String>();
+        protocols.addAll(Arrays.asList(engine.getSupportedProtocols()));
+
+        ArrayList<String> enabledCiphers = new ArrayList<String>();
+        for (String cipher: RECOMMENDED_CIPHERS) {
+            if (ciphers.contains(cipher))
+                enabledCiphers.add(cipher);
+        }
+
+        ArrayList<String> enabledProtocols = new ArrayList<String>();
+        for (String protocol: RECOMMENDED_PROTOCOLS) {
+            if (protocols.contains(protocol))
+                enabledProtocols.add(protocol);
+        }
+
+        enabledCiphers.addAll(Arrays.asList(engine.getEnabledCipherSuites()));
+        enabledProtocols.addAll(Arrays.asList(engine.getEnabledProtocols()));
+//        engine.setEnabledCipherSuites(enabledCiphers.toArray(new String[enabledCiphers.size()]));
+//        engine.setEnabledProtocols(enabledProtocols.toArray(new String[enabledProtocols.size()]));
+//        engine.setEnabledCipherSuites(RECOMMENDED_CIPHERS);
+        engine.setEnabledProtocols(new String[] {"SSL"});
+    }
+    */
+
+    static {
+        // following is the "trust the system" certs setup
+        try {
+            // critical extension 2.5.29.15 is implemented improperly prior to 4.0.3.
+            // https://code.google.com/p/android/issues/detail?id=9307
+            // https://groups.google.com/forum/?fromgroups=#!topic/netty/UCfqPPk5O4s
+            // certs that use this extension will throw in Cipher.java.
+            // fallback is to use a custom SSLContext, and hack around the x509 extension.
+            if (Build.VERSION.SDK_INT <= 15)
+                throw new Exception();
+            defaultSSLContext = SSLContext.getInstance("Default");
+        }
+        catch (Exception ex) {
+            try {
+                defaultSSLContext = SSLContext.getInstance("TLS");
+                TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        for (X509Certificate cert : certs) {
+                            if (cert != null && cert.getCriticalExtensionOIDs() != null)
+                                cert.getCriticalExtensionOIDs().remove("2.5.29.15");
+                        }
+                    }
+                } };
+                defaultSSLContext.init(null, trustAllCerts, null);
+            }
+            catch (Exception ex2) {
+                ex.printStackTrace();
+                ex2.printStackTrace();
+            }
+        }
+    }
+
+    public static SSLEngine createDefaultSSLEngine() {
+        return defaultSSLContext.createSSLEngine();
+    }
 
     @Override
     public void end() {
@@ -40,27 +201,19 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
     }
 
     public AsyncSSLSocketWrapper(AsyncSocket socket, String host, int port) {
-        this(socket, host, port, sslContext, null, null, true);
+        this(socket, host, port, createDefaultSSLEngine(), null, null, true);
     }
 
     TrustManager[] trustManagers;
     boolean clientMode;
 
-    public AsyncSSLSocketWrapper(AsyncSocket socket, String host, int port, SSLContext sslContext, TrustManager[] trustManagers, HostnameVerifier verifier, boolean clientMode) {
+    public AsyncSSLSocketWrapper(AsyncSocket socket, String host, int port, SSLEngine sslEngine, TrustManager[] trustManagers, HostnameVerifier verifier, boolean clientMode) {
         mSocket = socket;
         hostnameVerifier = verifier;
         this.clientMode = clientMode;
         this.trustManagers = trustManagers;
+        this.engine = sslEngine;
 
-        if (sslContext == null)
-            sslContext = AsyncSSLSocketWrapper.sslContext;
-
-        if (host != null) {
-            engine = sslContext.createSSLEngine(host, port);
-        }
-        else {
-            engine = sslContext.createSSLEngine();
-        }
         mHost = host;
         mPort = port;
         engine.setUseClientMode(clientMode);
@@ -77,6 +230,8 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
         // aka exhcange.setDatacallback
         mEmitter = new BufferedDataEmitter(socket);
 
+        final Allocator allocator = new Allocator();
+        allocator.setMinAlloc(8192);
         final ByteBufferList transformed = new ByteBufferList();
         mEmitter.setDataCallback(new DataCallback() {
             @Override
@@ -86,8 +241,10 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
                 try {
                     mUnwrapping = true;
 
-                    mReadTmp.position(0);
-                    mReadTmp.limit(mReadTmp.capacity());
+                    if (bb.hasRemaining()) {
+                        ByteBuffer all = bb.getAll();
+                        bb.add(all);
+                    }
 
                     ByteBuffer b = ByteBufferList.EMPTY_BYTEBUFFER;
                     while (true) {
@@ -95,11 +252,18 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
                             b = bb.remove();
                         }
                         int remaining = b.remaining();
+                        int before = transformed.remaining();
 
-                        SSLEngineResult res = engine.unwrap(b, mReadTmp);
+                        SSLEngineResult res;
+                        {
+                            // wrap to prevent access to the readBuf
+                            ByteBuffer readBuf = allocator.allocate();
+                            res = engine.unwrap(b, readBuf);
+                            addToPending(transformed, readBuf);
+                            allocator.track(transformed.remaining() - before);
+                        }
                         if (res.getStatus() == Status.BUFFER_OVERFLOW) {
-                            addToPending(transformed);
-                            mReadTmp = ByteBufferList.obtain(mReadTmp.remaining() * 2);
+                            allocator.setMinAlloc(allocator.getMinAlloc() * 2);
                             remaining = -1;
                         }
                         else if (res.getStatus() == Status.BUFFER_UNDERFLOW) {
@@ -114,13 +278,12 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
                             b = ByteBufferList.EMPTY_BYTEBUFFER;
                         }
                         handleResult(res);
-                        if (b.remaining() == remaining) {
+                        if (b.remaining() == remaining && before == transformed.remaining()) {
                             bb.addFirst(b);
                             break;
                         }
                     }
 
-                    addToPending(transformed);
                     Util.emitAllData(AsyncSSLSocketWrapper.this, transformed);
                 }
                 catch (SSLException ex) {
@@ -134,54 +297,16 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
         });
     }
 
-    void addToPending(ByteBufferList out) {
-        if (mReadTmp.position() > 0) {
-            mReadTmp.flip();
+    void addToPending(ByteBufferList out, ByteBuffer mReadTmp) {
+        mReadTmp.flip();
+        if (mReadTmp.hasRemaining()) {
             out.add(mReadTmp);
-            mReadTmp = ByteBufferList.obtain(mReadTmp.capacity());
+        }
+        else {
+            ByteBufferList.reclaim(mReadTmp);
         }
     }
 
-    static SSLContext sslContext;
-
-    static {
-        // following is the "trust the system" certs setup
-        try {
-            // critical extension 2.5.29.15 is implemented improperly prior to 4.0.3.
-            // https://code.google.com/p/android/issues/detail?id=9307
-            // https://groups.google.com/forum/?fromgroups=#!topic/netty/UCfqPPk5O4s
-            // certs that use this extension will throw in Cipher.java.
-            // fallback is to use a custom SSLContext, and hack around the x509 extension.
-            if (Build.VERSION.SDK_INT <= 15)
-                throw new Exception();
-            sslContext = SSLContext.getInstance("Default");
-        }
-        catch (Exception ex) {
-            try {
-                sslContext = SSLContext.getInstance("TLS");
-                TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return new X509Certificate[0];
-                    }
-
-                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                    }
-
-                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                        for (X509Certificate cert : certs) {
-                            if (cert != null && cert.getCriticalExtensionOIDs() != null)
-                                cert.getCriticalExtensionOIDs().remove("2.5.29.15");
-                        }
-                    }
-                } };
-                sslContext.init(null, trustAllCerts, null);
-            }
-            catch (Exception ex2) {
-                ex.printStackTrace();
-                ex2.printStackTrace();
-            }
-        }
-    }
 
     SSLEngine engine;
     boolean finishedHandshake = false;
@@ -364,8 +489,8 @@ public class AsyncSSLSocketWrapper implements AsyncSocketWrapper, AsyncSSLSocket
                 }
                 else {
                     mWriteTmp = ByteBufferList.obtain(calculateAlloc(bb.remaining()));
+                    handleResult(res);
                 }
-                handleResult(res);
             }
             catch (SSLException e) {
                 report(e);
