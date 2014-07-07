@@ -40,7 +40,7 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
         if (mWriter != null) {
             if (mRequest.getHeaders().getContentType() == null)
                 mRequest.getHeaders().setContentType(mWriter.getContentType());
-            if (mWriter.length() > 0) {
+            if (mWriter.length() >= 0) {
                 mRequest.getHeaders().setContentLength(mWriter.length());
                 mSink = mSocket;
             }
@@ -215,11 +215,6 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
     @Override
     public boolean isOpen() {
         return mSink.isOpen();
-    }
-
-    @Override
-    public void close() {
-        mSink.close();
     }
 
     @Override
