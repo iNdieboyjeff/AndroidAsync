@@ -31,7 +31,7 @@ public class Util {
 //                System.out.println("Data: " + list.peekString());
                 System.out.println("handler: " + handler);
                 assert false;
-                throw new RuntimeException("mDataHandler failed to consume data, yet remains the mDataHandler.");
+//                throw new RuntimeException("mDataHandler failed to consume data, yet remains the mDataHandler.");
             }
         }
         if (list.remaining() != 0 && !emitter.isPaused()) {
@@ -42,7 +42,7 @@ public class Util {
             System.out.println("handler: " + handler);
             System.out.println("emitter: " + emitter);
             assert false;
-            throw new RuntimeException("Not all data was consumed by Util.emitAllData");
+//            throw new RuntimeException("Not all data was consumed by Util.emitAllData");
         }
     }
 
